@@ -1,402 +1,675 @@
-
-
-### tl;dr 
-
-A walkthrough on how to get set up with Heroku and its toolkit and then how to deploy a simple web application (for free) on the Heroku Cloud. 
-
-To see a more advanced Flask app that uses USGS data and Google APIs, checkout this repo: [datademofun/heroku-flask-quakes-lesssimple](https://github.com/datademofun/heroku-flask-quakes-lesssimple)
-
-This is a long README of the steps, but all the actual code and configuration for this app is included in this repo. You can copy and deploy it through your own Heroku account.
-
-
-# Deploying a simple Flask app to the cloud via Heroku
-
-This walkthrough will acquaint you with the [popular Heroku cloud application platform](https://devcenter.heroku.com/start). Previously, we have been able to create Python Flask apps (see lessons [here](http://www.compjour.org/lessons/flask-single-page/) and [here](http://www.compjour.org/lessons/flask-recalls/)) and run them locally on our own computers. With a cloud service, we are able to put our websites onto the public World Wide Web, with a publicly accessible URL.
-
-A live version of this lesson's very simple app can be found at this URL:
-https://warm-scrubland-16039.herokuapp.com/
-
-(it'll be slow because I'm using Heroku's free tier)
-
-To reduce the number of new moving parts to learn about, [we'll only worry about creating the simplest of Flask apps](http://www.compjour.org/lessons/flask-single-page/) -- the lesser the complexity, the fewer the dependencies, and thus, the fewer the conflicts. So pay attention to the steps that involve touching the Heroku service and toolset.
-
-Deploying an app on the cloud just means that we're putting code on a computer that we have no direct control over. Writing the Python app code is the same as it was before, but we have to follow a few Heroku conventions before Heroku will execute our code on its own computers.
-
-Review the lessons on [creating a simple Flask app if you've forgotten how to put together a simple Flask app](http://www.compjour.org/lessons/flask-single-page/).
-
-Some of the instructions in this tutorial comes from these this official Heroku tutorial: [Getting Started on Heroku with Python](https://devcenter.heroku.com/articles/getting-started-with-python). However, be warned, the official tutorial includes a lot of extra steps that may not apply to your system. I've tried to filter them to a minimum.
-
-
-------------------
-
-
-
-# Sign up for Heroku
-
-Heroku, being a Software as a Service (SaaS)-type of service, requires you to create an account and login before you can start using its computers. Don't worry, creating an account and running a simple app is free and doesn't require a credit card.
-
-You can create an account at this URL: [https://signup.heroku.com/dc](https://signup.heroku.com/dc)
-
-## Download the Heroku toolbelt
-
-Heroku has a command-line "toolbelt" that we must download and install in order commands that will simplify our communication with the Heroku servers. The toolbelt can be downloaded at: [https://toolbelt.heroku.com/](https://toolbelt.heroku.com/)
-
-![image download-heroku-toolbelt.png](readme_assets/images/download-heroku-toolbelt.png)
-
-## Authenticate with Heroku with `heroku login`
-
-Installing the Heroku toolbelt will give you access to the `heroku` command which has several subcommands for interacting with the Heroku service. 
-
-The first command you need to run is `heroku login`, which will ask you to enter your login credentials so that every subsequent `heroku` command knows who you are:
-
-(You will only have to do this __once__)
-
-~~~sh
-$ heroku login
-~~~
-
-![readme_assets/images/heroku-login.gif](readme_assets/images/heroku-login.gif)
-
-
-
-# Let's create a Flask app
-
-Create a basic Flask app of any kind, i.e. one that consists of just __app.py__. You can revisit the [lessons here](http://www.compjour.org/lessons/flask-single-page/hello-tiny-flask-app/) or the sample repo at: [https://github.com/datademofun/heroku-basic-flask](https://github.com/datademofun/heroku-basic-flask)
-
-Heck, try to write it out by memory if you can -- below, I've made the app output simple HTML that includes the current time and a placeholder image from the [loremflickr.com](http://loremflickr.com/) service:
-
-~~~py
-from flask import Flask
-from datetime import datetime
-app = Flask(__name__)
-
-@app.route('/')
-def homepage():
-    the_time = datetime.now().strftime("%A, %d %b %Y %l:%M %p")
-
-    return """
-    <h1>Hello heroku</h1>
-    <p>It is currently {time}.</p>
-
-    <img src="http://loremflickr.com/600/400">
-    """.format(time=the_time)
-
-if __name__ == '__main__':
-    app.run(debug=True, use_reloader=True)
-~~~
-
-You should be able to run this app on your own system via the familiar invocation and visiting [http://localhost:5000](http://localhost:5000):
-
-~~~sh
-$ python app.py
-~~~
-
-
-# Specifying dependencies for deploying Heroku
-
-(the following comes from Heroku's guide to [Deploying Python and Django Apps on Heroku](https://devcenter.heroku.com/articles/deploying-python))
-
-Our simple Flask app has has a couple of __dependencies__: the Python interpreter and the Flask library (duh). Which means that Python and the Flask library must be installed on our computer.
-
-When we talk about deploying our app onto Heroku, or any cloud service, we are working with _someone else's computer_. And, for the most part, we can't count on "someone else's computer" to have the same software stack as we do.
-
-With Heroku, we have to include some metadata with our application code, so that Heroku knows how to set up a compatible webserver and install the software that our application needs. The metadata can be as simple as including a few plaintext files, which I list below in the next section. 
-
-## Installing the gunicorn web server
-
-Whenever we run `python app.py` from our command-line, we're running the default webserver that comes with Flask. However, Heroku seems to prefer a [web server called __gunicorn__](https://devcenter.heroku.com/articles/python-gunicorn). Just so that we can follow along with Heroku's documentation, let's install gunicorn on our own system. It's a Python library like any other and can be installed with __pip__:
-
-~~~sh
-$ pip install gunicorn
-~~~
-
-## Adding a requirements.txt
-
-By convention, Python packages often include a plaintext file named __requirements.txt__, in which the dependencies for the package are listed on each line.
-
-Create an empty file named `requirements.txt` (in the same root folder as __app.py__).
-
-So, what our are dependencies? For starters, __Flask__. So, add it to __requirements.txt__ (it's case sensitive):
-
-~~~
-Flask
-~~~
-
-Even though it's not part of our __app.py__, we did just install __gunicorn__ -- because I said to -- so let's throw that into __requirements.txt__:
-
-~~~
-Flask
-gunicorn
-~~~
-
-
-## Specifying Python version with `runtime.txt`
-
-Heroku will know that we be running a Python app, but because there's a huge disparity between Python versions (notably, [Python 2 versus 3](https://wiki.python.org/moin/Python2orPython3)), we need to tell Heroku to use the Python version that we're using on our own computer to develop our app.
-
-Which version of Python are we/you running? From your command line, run the Python interpreter with the `--version` flag:
-
-~~~sh
-$ python --version
-Python 3.5.1 :: Anaconda 2.5.0 (x86_64)
-~~~
-
-Nevermind that `"Anaconda"` bit -- we just need the version number, e.g. __3.5.1__
-
-
-Create __runtime.txt__ in your root app folder and add just the single line (note: replace my example version number with yours, if it is different):
-
-~~~sh
-python-3.5.1
-~~~
-
-## Create a `Procfile`
-
-OK, one more necessary plaintext file: [Heroku needs a file to tell it how to start up the web app](https://devcenter.heroku.com/articles/deploying-python#the-procfile). By convention, this file is just a plaintext file is called (and named): __Procfile__:
-
-> A Procfile is a text file in the root directory of your application that defines process types and explicitly declares what command should be executed to start your app. 
-
-
-And for now, __Procfile__ can contain just this line:
-
-~~~
-web: gunicorn app:app --log-file=-
-~~~
-
-
-## Add a .gitignore file
-
-This is not necessary for running an app, but we want to prevent unwanted files from being pushed up to Heroku Git repo (or any git repo) later on. Create a new file named `.gitignore` and copy the contents of the example `.gitignore` file here:
-
-[https://github.com/github/gitignore/blob/master/Python.gitignore](https://github.com/github/gitignore/blob/master/Python.gitignore)
-
-
-
-## Run `heroku local`
-
-So now our simple Flask app folder contains this file structure:
-
-~~~
-  ├── .gitignore
-  ├── Procfile
-  ├── app.py
-  ├── requirements.txt
-  └── runtime.txt
-~~~
-
-Before we deploy our app on to Heroku, we'll want to test it on our own system _again_ -- but this time, instead of using `python app.py`, [we'll use the Heroku toolbelt subcommand, __local__](https://devcenter.heroku.com/articles/deploying-python#build-your-app-and-run-it-locally):
-
-~~~sh
-$ heroku local web
-~~~
-
-It will create an app at [http://localhost:5000](http://localhost:5000), which should work like before when you ran `python app.py.`
-
-What was the point of that? Go into your `Procfile`, delete the single line that we put into it, save it, then try `heroku local web` again. You'll get an error message because Heroku won't know how to build the application:
-
-~~~sh
-$ heroku local web
-[WARN] No ENV file found
-[WARN] Required Key 'web' Does Not Exist in Procfile Definition
-~~~
-
-
-# Setting up our app's Git repo
-
-This part will be a little confusing. Heroku deploys using __git__ -- which is _not to be confused with_ __Github__. (Hopefully, you have __git__ installed at this point.)
-
-Basically, this means before we can deploy to Heroku, we need to create a git repo in our app, add the files, and commit them. But we _don't_ need to push them onto a Github repo if we don't want to.
-
-In fact, for this basic app, don't bother making a Github repo. Just make a local git repo:
-
-~~~sh
-$ git init
-$ git add .
-$ git commit -m 'first'
-~~~
-
-
-# Creating a Heroku application
-
-OK, now Heroku has all it needs to provision a server for our application.
-
-Now we need to do two steps:
-
-1. Tell Heroku to initialize an application [via its __create__ command](https://devcenter.heroku.com/articles/creating-apps).
-2. Tell Heroku to deploy our application by pushing our code onto the Git repo hosted on Heroku.
-
-
-## Initializing a Heroku application
-
-First, make sure you've successfully created a Git repo in your app folder. Running `git status` should, at the very least, not give you an error message telling you that you've yet to create a Git repo.
-
-Then, run this command:
-
-~~~sh
-$ heroku create
-~~~
-
-The __create__ subcommand sets up a URL that your application will live at, and a Git repo from which you'll be pushing your code to on deployment.
-
-The `heroku create` command results in output that looks like this:
-
-~~~stdout
-Creating app... ⬢ warm-scrubland-16039
-https://warm-scrubland-16039.herokuapp.com/ | https://git.heroku.com/warm-scrubland-16039.git
-~~~
-
-That output tells us two things:
-
-1. Our application can be visited at: `https://boiling-journey-47934.herokuapp.com/`
-2. Heroku has git repo at the url `https://git.heroku.com/boiling-journey-47934.git`...In fact, the `create` command has helpfully set up a _remote_ named _heroku_ for us to __push__ to.
-
-If you visit your application's app, e.g. `https://some-funnyword-9999.herokuapp.com/`. you'll get a placeholder page:
-
-![image welcome-heroku.png](readme_assets/images/welcome-heroku.png)
-
-That's not what we programmed our app to do -- so that's just a page that comes from Heroku -- we haven't really deployed our app yet. But Heroku is ready for us. You can further confirm this by visiting [https://dashboard.heroku.com/](https://dashboard.heroku.com/) and seeing your application's URL at the bottom:
-
-![image heroku-dashboard.png](/readme_assets/images/heroku-dashboard.png)
-
-Clicking on that application entry will reveal a page that is empty of "processes":
-
-![image heroku-dashboard-initial-app.png](readme_assets/images/heroku-dashboard-initial-app.png)
-
-
-As for that Git repo that Heroku created for us...run this command to see the endpoints:
-
-~~~sh
-$ git remote show heroku
-~~~
-
-The output:
-
-~~~sh
-* remote heroku
-  Fetch URL: https://git.heroku.com/warm-scrubland-16039.git
-  Push  URL: https://git.heroku.com/warm-scrubland-16039.git
-  HEAD branch: (unknown)
-~~~
-
-
-
-## Deploying our application code
-
-OK, let's finally __deploy our app__. We tell Heroku that we want to deploy our currently committed code by doing a `git push` to `heroku master`:
-
-~~~sh
-$ git push heroku master
-~~~
-
-This should seem familiar to when you've pushed code to your __Github account__, but targeting `origin master`:
-
-~~~sh
-$ git push origin master
-~~~
-
-...but of course, we haven't actually created a __Github__ git repo for our simple app...we've only created a __local repo__. And, by running `heroku create`, we also created a repo on Heroku...which we will now push to:
-
-~~~sh
-$ git push heroku master
-~~~
-
-And with that simple command, Heroku will go through the steps of taking our application code, installing the dependencies we specified in `requirements.txt` and `runtime.txt`, and then starting a webserver as specified in `Procfile`:
-
-(this process takes a lot longer than simply pushing code onto Github to save)
-
-After about 30 seconds, you'll get output telling you how to find your application on the web:
-
-
-![readme_assets/images/heroku-git-push.gif](readme_assets/images/heroku-git-push.gif)
-
-~~~sh
-remote:        https://warm-scrubland-16039.herokuapp.com/ deployed to Heroku
-remote: 
-remote: Verifying deploy.... done.
-To https://git.heroku.com/warm-scrubland-16039.git
-   1c6e386..b0e9510  master -> master
-~~~
-
-My app happens to be given the name __warm-scrubland-16039__, which means that it is now available at the following URL for the whole world:
-
-[https://warm-scrubland-16039.herokuapp.com/](https://warm-scrubland-16039.herokuapp.com/ )
-
-And that's how you make your application available to the world.
-
-## Scaling the app with dynos
-
-Heroku [has this concept of __dynos__](https://devcenter.heroku.com/articles/dynos), an abstraction of the servers used to host your app and do its computational work. The free account lets you run apps on a single dyno...and by default, your new apps should have a single dyno upon creation. But just incase it doesn't, run this heroku command:
-
-
-~~~sh
-$ heroku ps:scale web=1
-~~~
-
-
-# Saving your application to Github
-
-For homework purposes -- though not necessarily _this_ app -- you'll want to push your application code to your Github account as well.
-
-You need to create an entirely new repo on Github, e.g. 
-
-      https://github.com/your_username/fun_flask_app
-
-
-Which will result in these instructions:
-
-> ### …or push an existing repository from the command line
->
-> `git remote add origin git@github.com:your_username/fun_flask_app.git`
-> 
-
-
-Replace `your_username` and `fun_flask_app` with the appropriate names. Then add run the given command:
-
-~~~sh
-git remote add origin git@github.com:your_username/fun_flask_app.git
-~~~
-
-The __git add__ and __git commit__ commands stay the same no matter how many repos you push to. But you have to push to each repo specifically and separately:
-
-To get your code on Github:
-
-~~~
-git push origin master
-~~~
-
-And, again, to get it deployed on Heroku:
-
-~~~
-git push heroku master
-~~~
-
-
-# Changing our application code
-
-Altering the codebase of a Heroku-deployed app is not much different than how we've re-edited and saved code before, except that we have to run __git push heroku master__ in order to update the application on the Heroku server -- Heroku's server doesn't have a mind-meld with our computer's hard drive, we have to notify it of our changes via a `git push`.
-
-However, `git push` doesn't push anything until we've actually changed code -- and added and committed those changes via `git add` and `git commit`.
-
-Give it a try. Change __app.py__. Then add/commit/push:
-
-~~~sh
-git add --all
-git commit -m 'changes'
-git push heroku master
-~~~
-
-Depending on how much you've altered the code base, the push/deploy process may take just as long as the initial install. But that's a reasonable price to pay for an easy process for updating an application that the entire world can access.
-
-
-# Managing your Heroku apps
-
-If you plan on using Heroku to deploy your apps but _not while not paying a monthly bill_, you'll only be able to deploy one live app at a time.
-
-To __destroy__ an app, which will destroy the deployed version and the reserved URL -- but _not_ your local code -- you can select your app via the [Heroku web dashboard](https://dashboard.heroku.com/apps), then delete it via its configuration/settings menu.
-
-Or, if you'd rather do it from the command-line with the Heroku toolbelt, use the __apps:destroy__ subcommand:
-
-~~~sh
-$ heroku apps:destroy whatever-yourappnameis-99999
-~~~
-# bubbleteam-server
+# BubbleTeam™ Server 🛁🍵
+
+### Adding URLs to the database
+
+Adding a URL to the base is easy. All you need to do is make an HTTP request.
+
+The endpoint is `/url`, which accepts `POST` requests.
+
+The request body must contain JSON with the following structure:
+
+```json
+{
+  "username": string,
+  "url": string,
+}
+```
+
+`username` can be any string
+`url` can be any valid URL.
+
+If your request is malformed (e.g. you forgot a field, or sent an invalid URL), the response will look something like:
+
+```json
+{
+    "reason": "missing 'username' field in JSON body",
+    "success": false
+}
+```
+
+Here's an example valid request:
+
+```POST https://bubbleteam-server.herokuapp.com/url```
+```json
+{
+  "username": "avi",
+  "url": "http://www.cnn.com/2017/04/29/politics/donald-trump-100-days-rally/index.html",
+}
+```
+
+Which would return the following response:
+
+```json
+{
+    "_id": "5905721cfd71822a7d593200",
+    "entities": [
+        {
+            "count": 20,
+            "relevance": 0.925867,
+            "text": "Trump",
+            "type": "Person"
+        },
+        {
+            "count": 7,
+            "relevance": 0.537671,
+            "text": "Vice President",
+            "type": "JobTitle"
+        },
+        {
+            "count": 4,
+            "relevance": 0.347251,
+            "text": "president",
+            "type": "JobTitle"
+        },
+        {
+            "count": 7,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/David_Gergen",
+                "name": "David Gergen",
+                "subtype": [
+                    "Politician",
+                    "BoardMember",
+                    "TVActor",
+                    "TVWriter"
+                ]
+            },
+            "relevance": 0.284351,
+            "text": "David Gergen",
+            "type": "Person"
+        },
+        {
+            "count": 2,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/Ronald_Reagan",
+                "name": "Ronald Reagan",
+                "subtype": [
+                    "Politician",
+                    "President",
+                    "AwardWinner",
+                    "ChivalricOrderMember",
+                    "MilitaryPerson",
+                    "PoliticalAppointer",
+                    "USPresident",
+                    "FilmActor",
+                    "TVActor"
+                ]
+            },
+            "relevance": 0.281128,
+            "text": "President Ronald Reagan",
+            "type": "Person"
+        },
+        {
+            "count": 3,
+            "relevance": 0.248758,
+            "text": "White House",
+            "type": "Organization"
+        },
+        {
+            "count": 2,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/Swatara_Township,_Dauphin_County,_Pennsylvania",
+                "name": "Swatara Township, Dauphin County, Pennsylvania",
+                "subtype": [
+                    "CityTown",
+                    "StateOrCounty"
+                ]
+            },
+            "relevance": 0.229042,
+            "text": "Pennsylvania",
+            "type": "Location"
+        },
+        {
+            "count": 3,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/Barack_Obama",
+                "name": "Barack Obama",
+                "subtype": [
+                    "Politician",
+                    "President",
+                    "Appointer",
+                    "AwardWinner",
+                    "Celebrity",
+                    "PoliticalAppointer",
+                    "U.S.Congressperson",
+                    "USPresident",
+                    "TVActor"
+                ]
+            },
+            "relevance": 0.224396,
+            "text": "Barack Obama",
+            "type": "Person"
+        },
+        {
+            "count": 4,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/United_States",
+                "name": "United States",
+                "subtype": [
+                    "Region",
+                    "AdministrativeDivision",
+                    "GovernmentalJurisdiction",
+                    "FilmEditor",
+                    "Country"
+                ]
+            },
+            "relevance": 0.216166,
+            "text": "US",
+            "type": "Location"
+        },
+        {
+            "count": 2,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/Washington,_D.C.",
+                "name": "Washington, D.C.",
+                "subtype": [
+                    "AdministrativeDivision",
+                    "GovernmentalJurisdiction",
+                    "MilitaryPost",
+                    "PlaceWithNeighborhoods",
+                    "USCounty",
+                    "City"
+                ]
+            },
+            "relevance": 0.214518,
+            "text": "Washington",
+            "type": "Location"
+        },
+        {
+            "count": 2,
+            "relevance": 0.209121,
+            "text": "Harrisburg",
+            "type": "Location"
+        },
+        {
+            "count": 3,
+            "relevance": 0.20147,
+            "text": "executive",
+            "type": "JobTitle"
+        },
+        {
+            "count": 1,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/Mike_Pence",
+                "name": "Mike Pence",
+                "subtype": [
+                    "Politician",
+                    "U.S.Congressperson",
+                    "BroadcastArtist"
+                ]
+            },
+            "relevance": 0.199392,
+            "text": "Mike Pence",
+            "type": "Person"
+        },
+        {
+            "count": 1,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/North_Korea",
+                "name": "North Korea",
+                "subtype": [
+                    "GovernmentalJurisdiction",
+                    "Country"
+                ]
+            },
+            "relevance": 0.195313,
+            "text": "North Korea",
+            "type": "Location"
+        },
+        {
+            "count": 1,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/CNN",
+                "name": "CNN",
+                "subtype": [
+                    "Broadcast",
+                    "AwardWinner",
+                    "RadioNetwork",
+                    "TVNetwork"
+                ]
+            },
+            "relevance": 0.177431,
+            "text": "CNN",
+            "type": "Company"
+        },
+        {
+            "count": 1,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/Richard_Nixon",
+                "name": "Richard Nixon",
+                "subtype": [
+                    "FilmCharacter",
+                    "MusicalArtist",
+                    "Politician",
+                    "President",
+                    "Appointer",
+                    "MilitaryCommander",
+                    "MilitaryPerson",
+                    "PoliticalAppointer",
+                    "TVPersonality",
+                    "U.S.Congressperson",
+                    "USPresident",
+                    "USVicePresident",
+                    "FilmActor",
+                    "TVActor"
+                ]
+            },
+            "relevance": 0.175443,
+            "text": "Richard Nixon",
+            "type": "Person"
+        },
+        {
+            "count": 1,
+            "relevance": 0.171046,
+            "text": "Paris",
+            "type": "Location"
+        },
+        {
+            "count": 3,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/Seth_Meyers",
+                "name": "Seth Meyers",
+                "subtype": [
+                    "Actor",
+                    "AwardNominee",
+                    "FilmActor",
+                    "FilmProducer",
+                    "TVActor",
+                    "FilmWriter",
+                    "TVWriter"
+                ]
+            },
+            "relevance": 0.170223,
+            "text": "Seth Meyers",
+            "type": "Person"
+        },
+        {
+            "count": 1,
+            "relevance": 0.169635,
+            "text": "CNN Newsroom",
+            "type": "Broadcaster"
+        },
+        {
+            "count": 1,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/Harry_S._Truman",
+                "name": "Harry S. Truman",
+                "subtype": [
+                    "Politician",
+                    "President",
+                    "MilitaryCommander",
+                    "MilitaryPerson",
+                    "PoliticalAppointer",
+                    "U.S.Congressperson",
+                    "USPresident",
+                    "USVicePresident",
+                    "ElectionCampaign",
+                    "TVActor"
+                ]
+            },
+            "relevance": 0.168069,
+            "text": "Harry Truman",
+            "type": "Person"
+        },
+        {
+            "count": 1,
+            "relevance": 0.16514,
+            "text": "Office of Trade and Manufacturing Policy",
+            "type": "Organization"
+        },
+        {
+            "count": 1,
+            "relevance": 0.163968,
+            "text": "Hollywood",
+            "type": "Location"
+        },
+        {
+            "count": 1,
+            "relevance": 0.158904,
+            "text": "Mexico",
+            "type": "Location"
+        },
+        {
+            "count": 1,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/Jared_Kushner",
+                "name": "Jared Kushner",
+                "subtype": [
+                    "Celebrity"
+                ]
+            },
+            "relevance": 0.158649,
+            "text": "Jared Kushner",
+            "type": "Person"
+        },
+        {
+            "count": 1,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/Poppy_Harlow",
+                "name": "Poppy Harlow",
+                "subtype": [
+                    "TVPersonality"
+                ]
+            },
+            "relevance": 0.155999,
+            "text": "Poppy Harlow",
+            "type": "Person"
+        },
+        {
+            "count": 1,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/Neil_Gorsuch",
+                "name": "Neil Gorsuch",
+                "subtype": [
+                    "Judge"
+                ]
+            },
+            "relevance": 0.154718,
+            "text": "Neil Gorsuch",
+            "type": "Person"
+        },
+        {
+            "count": 1,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/James_A._Garfield",
+                "name": "James A. Garfield",
+                "subtype": [
+                    "Politician",
+                    "President"
+                ]
+            },
+            "relevance": 0.152301,
+            "text": "James Garfield",
+            "type": "Person"
+        },
+        {
+            "count": 1,
+            "relevance": 0.151146,
+            "text": "political analyst",
+            "type": "JobTitle"
+        },
+        {
+            "count": 1,
+            "disambiguation": {
+                "dbpedia_resource": "http://dbpedia.org/resource/New_York_City",
+                "name": "New York City",
+                "subtype": [
+                    "PoliticalDistrict",
+                    "GovernmentalJurisdiction",
+                    "PlaceWithNeighborhoods",
+                    "WineRegion",
+                    "FilmScreeningVenue",
+                    "City"
+                ]
+            },
+            "relevance": 0.150945,
+            "text": "New York",
+            "type": "Location"
+        },
+        {
+            "count": 1,
+            "relevance": 0.148761,
+            "text": "Ivanka",
+            "type": "Person"
+        },
+        {
+            "count": 1,
+            "relevance": 0.145935,
+            "text": "Russia",
+            "type": "Location"
+        },
+        {
+            "count": 1,
+            "relevance": 0.143238,
+            "text": "John Berman",
+            "type": "Person"
+        },
+        {
+            "count": 1,
+            "relevance": 0.136522,
+            "text": "Supreme Court",
+            "type": "Organization"
+        },
+        {
+            "count": 4,
+            "relevance": 0.123353,
+            "text": "100 days",
+            "type": "Quantity"
+        },
+        {
+            "count": 1,
+            "relevance": 0.123353,
+            "text": "136 years",
+            "type": "Quantity"
+        },
+        {
+            "count": 1,
+            "relevance": 0.123353,
+            "text": "36 years",
+            "type": "Quantity"
+        },
+        {
+            "count": 1,
+            "relevance": 0.123353,
+            "text": "one-hour",
+            "type": "Quantity"
+        },
+        {
+            "count": 1,
+            "relevance": 0.123353,
+            "text": "100-day",
+            "type": "Quantity"
+        }
+    ],
+    "keywords": [
+        {
+            "relevance": 0.945396,
+            "text": "Trump"
+        },
+        {
+            "relevance": 0.821267,
+            "text": "White House Correspondents"
+        },
+        {
+            "relevance": 0.789104,
+            "text": "Trump rallies"
+        },
+        {
+            "relevance": 0.761441,
+            "text": "president"
+        },
+        {
+            "relevance": 0.761377,
+            "text": "time Trump"
+        },
+        {
+            "relevance": 0.705269,
+            "text": "President Barack Obama"
+        },
+        {
+            "relevance": 0.68977,
+            "text": "President Ronald Reagan"
+        },
+        {
+            "relevance": 0.682047,
+            "text": "executive orders"
+        },
+        {
+            "relevance": 0.642245,
+            "text": "populist message resonates"
+        },
+        {
+            "relevance": 0.636029,
+            "text": "Vice President"
+        },
+        {
+            "relevance": 0.629556,
+            "text": "analyst David Gergen"
+        },
+        {
+            "relevance": 0.62926,
+            "text": "big talking points"
+        },
+        {
+            "relevance": 0.627449,
+            "text": "deeply disturbing speech"
+        },
+        {
+            "relevance": 0.626125,
+            "text": "Paris climate accord"
+        },
+        {
+            "relevance": 0.625636,
+            "text": "health care"
+        },
+        {
+            "relevance": 0.621888,
+            "text": "special prime-time edition"
+        },
+        {
+            "relevance": 0.612456,
+            "text": "American president"
+        },
+        {
+            "relevance": 0.600901,
+            "text": "son-in-law Jared Kushner"
+        },
+        {
+            "relevance": 0.594785,
+            "text": "real estate mogul"
+        },
+        {
+            "relevance": 0.59351,
+            "text": "White House posts"
+        },
+        {
+            "relevance": 0.588653,
+            "text": "key immigration goals"
+        },
+        {
+            "relevance": 0.588148,
+            "text": "reality TV star"
+        },
+        {
+            "relevance": 0.587424,
+            "text": "lowest approval ratings"
+        },
+        {
+            "relevance": 0.587094,
+            "text": "health care overhaul"
+        },
+        {
+            "relevance": 0.585576,
+            "text": "comedian Seth Meyers"
+        },
+        {
+            "relevance": 0.581564,
+            "text": "major legislative achievement"
+        },
+        {
+            "relevance": 0.538297,
+            "text": "larger crowd"
+        },
+        {
+            "relevance": 0.535914,
+            "text": "campaign playbook"
+        },
+        {
+            "relevance": 0.535903,
+            "text": "100-day milestone"
+        },
+        {
+            "relevance": 0.535442,
+            "text": "divisive speech"
+        },
+        {
+            "relevance": 0.531481,
+            "text": "prime-time duel"
+        },
+        {
+            "relevance": 0.529861,
+            "text": "Saturday night"
+        },
+        {
+            "relevance": 0.529307,
+            "text": "dinner"
+        },
+        {
+            "relevance": 0.529202,
+            "text": "Mike Pence"
+        },
+        {
+            "relevance": 0.527172,
+            "text": "divisive tone"
+        },
+        {
+            "relevance": 0.519659,
+            "text": "North Korea"
+        },
+        {
+            "relevance": 0.518658,
+            "text": "Washington media"
+        },
+        {
+            "relevance": 0.517237,
+            "text": "especially rang"
+        },
+        {
+            "relevance": 0.516458,
+            "text": "Manufacturing Policy"
+        },
+        {
+            "relevance": 0.515841,
+            "text": "incredible journey"
+        },
+        {
+            "relevance": 0.515045,
+            "text": "large group"
+        },
+        {
+            "relevance": 0.512974,
+            "text": "better people"
+        },
+        {
+            "relevance": 0.512596,
+            "text": "campaign aides"
+        },
+        {
+            "relevance": 0.512305,
+            "text": "John Berman"
+        },
+        {
+            "relevance": 0.510649,
+            "text": "Poppy Harlow"
+        },
+        {
+            "relevance": 0.51013,
+            "text": "CNN Newsroom"
+        },
+        {
+            "relevance": 0.509503,
+            "text": "presidential adviser"
+        },
+        {
+            "relevance": 0.509492,
+            "text": "hotel ballroom"
+        },
+        {
+            "relevance": 0.508827,
+            "text": "campaign trail"
+        },
+        {
+            "relevance": 0.50767,
+            "text": "Hollywood actors"
+        }
+    ],
+    "language": "en",
+    "retrieved_url": "http://www.cnn.com/2017/04/29/politics/donald-trump-100-days-rally/index.html",
+    "sentiment": {
+        "document": {
+            "label": "negative",
+            "score": -0.027134
+        }
+    },
+    "username": "ro"
+}
+```

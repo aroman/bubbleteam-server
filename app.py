@@ -2,12 +2,14 @@ import json
 import os
 import validators
 from flask import Flask, request, jsonify
+from flask_cors import CORS, cross_origin
 import flask_pymongo
 from watson_developer_cloud import NaturalLanguageUnderstandingV1
 import watson_developer_cloud.natural_language_understanding.features.v1 as \
     features
 
 app = Flask(__name__)
+CORS(app)
 app.config['MONGO_URI'] =  os.environ['BUBBLETEAM_MONGO_URI']
 mongo = flask_pymongo.PyMongo(app)
 

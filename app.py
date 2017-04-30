@@ -71,10 +71,10 @@ def addUrl():
     return jsonify(response)
 
 if __name__ == '__main__':
-    with app.app_context():
+    # with app.app_context():
         # Ensure that there are not two URLs associated with the same username
-        mongo.db.articles.create_index(
-            [("url", flask_pymongo.DESCENDING), ("username", flask_pymongo.ASCENDING)],
-            unique=True
-        )
+        # mongo.db.articles.create_index(
+        #     [("url", flask_pymongo.DESCENDING), ("username", flask_pymongo.ASCENDING)],
+        #     unique=True
+        # )
     app.run(debug=True, use_reloader=True)
